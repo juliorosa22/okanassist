@@ -1,6 +1,8 @@
 import React from 'react';
+import { View, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -10,8 +12,134 @@ import RegisterScreen from '../screens/RegisterScreen';
 
 // Main App Screens
 import HomeScreen from '../screens/HomeScreen';
+import ExpensesScreen from '../screens/ExpensesScreen';
+import RemindersScreen from '../screens/RemindersScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import QuickAddScreen from '../screens/QuickAddScreen';
 
 const Stack = createStackNavigator();
+const Tab = createBottomTabNavigator();
+
+// Custom Tab Bar Icon Component
+function TabIcon({ icon, focused, color }) {
+  return (
+    <Text style={{ 
+      fontSize: 24, 
+      color: focused ? color : '#9CA3AF',
+      marginBottom: -3 
+    }}>
+      {icon}
+    </Text>
+  );
+}
+
+// Bottom Tab Navigator
+function MainTabNavigator() {
+  const { colors, typography } = useTheme();
+  
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.primary,
+          elevation: 0,
+          shadowOpacity: 0,
+        },
+        headerTintColor: colors.textOnPrimary,
+        headerTitleStyle: {
+          fontWeight: '600',
+          color: colors.textOnPrimary,
+        },
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          paddingTop: 8,
+          paddingBottom: 8,
+          height: 70,
+        },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarLabelStyle: {
+          fontSize: typography.fontSize.xs,
+          fontWeight: typography.fontWeight.medium,
+          marginTop: 4,
+        },
+      }}
+    >
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{
+          title: 'Okan Assist',
+          tabBarLabel: 'Home',
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon icon="🏠" focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Expenses"
+        component={ExpensesScreen}
+        options={{
+          title: 'Expenses',
+          tabBarLabel: 'Expenses',
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon icon="💰" focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="QuickAdd"
+        component={QuickAddScreen}
+        options={{
+          title: 'Quick Add',
+          tabBarLabel: 'Add',
+          tabBarIcon: ({ focused, color }) => (
+            <View style={{
+              backgroundColor: focused ? colors.primary : colors.primaryLight,
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: 5,
+            }}>
+              <Text style={{ 
+                fontSize: 20, 
+                color: colors.textOnPrimary,
+              }}>
+                +
+              </Text>
+            </View>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Reminders"
+        component={RemindersScreen}
+        options={{
+          title: 'Reminders',
+          tabBarLabel: 'Reminders',
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon icon="🔔" focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          title: 'Settings',
+          tabBarLabel: 'Settings',
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon icon="⚙️" focused={focused} color={color} />
+          ),
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
 
 // Auth Stack Navigator
 function AuthNavigator() {
@@ -46,42 +174,6 @@ function AuthNavigator() {
           headerShown: true,
         }}
       />
-    </Stack.Navigator>
-  );
-}
-
-// Main App Stack Navigator
-function MainNavigator() {
-  const { colors } = useTheme();
-  
-  return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: colors.primary,
-          elevation: 0,
-          shadowOpacity: 0,
-        },
-        headerTintColor: colors.textOnPrimary,
-        headerTitleStyle: {
-          fontWeight: '600',
-          color: colors.textOnPrimary,
-        },
-        headerBackTitleVisible: false,
-      }}
-    >
-      <Stack.Screen 
-        name="Home" 
-        component={HomeScreen}
-        options={{ 
-          title: 'Okan Assist',
-          headerLeft: null, // Disable back button on home
-        }}
-      />
-      {/* Future screens will be added here:
-      <Stack.Screen name="Expenses" component={ExpensesScreen} />
-      <Stack.Screen name="Reminders" component={RemindersScreen} />
-      */}
     </Stack.Navigator>
   );
 }
@@ -132,7 +224,7 @@ export default function AppNavigator() {
         },
       }}
     >
-      {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
+      {isAuthenticated ? <MainTabNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );
 }

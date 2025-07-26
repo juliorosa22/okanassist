@@ -255,8 +255,11 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.demoTitle}>Demo Credentials:</Text>
           <Text style={styles.demoText}>
             Email: user@okanassist.com{'\n'}
-            Password: 123456{'\n\n'}
-            Or: demo@test.com / demo123
+            Password: 123456
+          </Text>
+          <Text style={styles.demoText}>
+            {'\n'}Email: demo@test.com{'\n'}
+            Password: demo123
           </Text>
         </View>
       </ScrollView>
