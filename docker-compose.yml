@@ -1,0 +1,19 @@
+services:
+  expo:
+    build:
+      context: .
+    ports:
+      - "19000:19000"   # Metro bundler (main)
+      - "19001:19001"   # Debugger UI
+      - "19002:19002"   # DevTools
+      - "8081:8081"     # Metro bundler alternative port
+    volumes:
+      - ./app:/app
+    working_dir: /app
+    environment:
+      - EXPO_DEVTOOLS_LISTEN_ADDRESS=0.0.0.0
+      - REACT_NATIVE_PACKAGER_HOSTNAME=0.0.0.0
+      - EXPO_NO_DOTENV=1
+    stdin_open: true
+    tty: true
+    command: sh -c "npm install && npx expo start --tunnel --clear"
