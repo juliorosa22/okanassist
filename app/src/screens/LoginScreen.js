@@ -1,3 +1,4 @@
+// app/src/screens/LoginScreen.js
 import React, { useState } from 'react';
 import {
   View,
@@ -9,23 +10,24 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 
 export default function LoginScreen({ navigation }) {
   const { colors, spacing, typography, shadows } = useTheme();
-  const { login, loading } = useAuth();
+  const { login, loginWithGoogle, loading } = useAuth();
   
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
   const [errors, setErrors] = useState({});
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: null }));
     }
@@ -59,6 +61,23 @@ export default function LoginScreen({ navigation }) {
       Alert.alert('Login Failed', result.message);
     }
     // Success is handled by auth context navigation
+  };
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    
+    try {
+      const result = await loginWithGoogle();
+      
+      if (!result.success) {
+        Alert.alert('Google Login Failed', result.message);
+      }
+      // Success is handled by auth context navigation
+    } catch (error) {
+      Alert.alert('Error', 'Google login failed. Please try again.');
+    } finally {
+      setGoogleLoading(false);
+    }
   };
 
   const styles = StyleSheet.create({
@@ -128,7 +147,7 @@ export default function LoginScreen({ navigation }) {
       borderRadius: 8,
       justifyContent: 'center',
       alignItems: 'center',
-      marginBottom: spacing.lg,
+      marginBottom: spacing.md,
       ...shadows.md,
     },
     loginButtonDisabled: {
@@ -154,6 +173,30 @@ export default function LoginScreen({ navigation }) {
       color: colors.textSecondary,
       fontSize: typography.fontSize.sm,
     },
+    googleButton: {
+      backgroundColor: colors.surface,
+      height: 48,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
+      flexDirection: 'row',
+      marginBottom: spacing.lg,
+      ...shadows.sm,
+    },
+    googleButtonDisabled: {
+      backgroundColor: colors.surfaceSecondary,
+    },
+    googleIcon: {
+      fontSize: 20,
+      marginRight: spacing.sm,
+    },
+    googleButtonText: {
+      color: colors.textPrimary,
+      fontSize: typography.fontSize.base,
+      fontWeight: typography.fontWeight.medium,
+    },
     registerContainer: {
       flexDirection: 'row',
       justifyContent: 'center',
@@ -170,24 +213,16 @@ export default function LoginScreen({ navigation }) {
       fontWeight: typography.fontWeight.medium,
       marginLeft: spacing.xs,
     },
-    demoContainer: {
-      backgroundColor: colors.surfaceSecondary,
-      padding: spacing.md,
-      borderRadius: 8,
-      marginTop: spacing.lg,
+    loadingContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
     },
-    demoTitle: {
-      fontSize: typography.fontSize.sm,
-      fontWeight: typography.fontWeight.medium,
-      color: colors.textSecondary,
-      marginBottom: spacing.xs,
-    },
-    demoText: {
-      fontSize: typography.fontSize.xs,
-      color: colors.textLight,
-      lineHeight: typography.lineHeight.relaxed,
+    loadingText: {
+      marginLeft: spacing.sm,
     },
   });
+
+  const isLoading = loading || googleLoading;
 
   return (
     <KeyboardAvoidingView 
@@ -216,6 +251,7 @@ export default function LoginScreen({ navigation }) {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!isLoading}
             />
             {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
           </View>
@@ -229,38 +265,63 @@ export default function LoginScreen({ navigation }) {
               value={formData.password}
               onChangeText={(value) => handleInputChange('password', value)}
               secureTextEntry
+              editable={!isLoading}
             />
             {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
           </View>
 
           <TouchableOpacity
-            style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+            style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
             onPress={handleLogin}
-            disabled={loading}
+            disabled={isLoading}
           >
-            <Text style={styles.loginButtonText}>
-              {loading ? 'Signing In...' : 'Sign In'}
-            </Text>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator color={colors.textOnPrimary} size="small" />
+                <Text style={[styles.loginButtonText, styles.loadingText]}>
+                  Signing In...
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.loginButtonText}>Sign In</Text>
+            )}
           </TouchableOpacity>
         </View>
+
+        <View style={styles.divider}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        <TouchableOpacity
+          style={[styles.googleButton, isLoading && styles.googleButtonDisabled]}
+          onPress={handleGoogleLogin}
+          disabled={isLoading}
+        >
+          {googleLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator color={colors.textPrimary} size="small" />
+              <Text style={[styles.googleButtonText, styles.loadingText]}>
+                Connecting...
+              </Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.googleIcon}>🔍</Text>
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
         <View style={styles.registerContainer}>
           <Text style={styles.registerText}>Don't have an account?</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('Register')}
+            disabled={isLoading}
+          >
             <Text style={styles.registerLink}>Sign Up</Text>
           </TouchableOpacity>
-        </View>
-
-        <View style={styles.demoContainer}>
-          <Text style={styles.demoTitle}>Demo Credentials:</Text>
-          <Text style={styles.demoText}>
-            Email: user@okanassist.com{'\n'}
-            Password: 123456
-          </Text>
-          <Text style={styles.demoText}>
-            {'\n'}Email: demo@test.com{'\n'}
-            Password: demo123
-          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

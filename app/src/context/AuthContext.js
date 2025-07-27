@@ -1,13 +1,11 @@
+// app/src/context/AuthContext.js
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ApiService from '../services/api';
+import GoogleAuthService from '../services/googleAuth';
 
-// this file defines the AuthContext for managing user authentication state in the app, for future implementation of user login, registration, and profile management functionalities.
-// here i should adjust to call the API for user authentication and profile management, but for now, it uses mock data for demonstration purposes.
-
-// Create Auth Context
 const AuthContext = createContext();
 
-// Custom hook to use auth
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -16,159 +14,232 @@ export const useAuth = () => {
   return context;
 };
 
-// Mock user data for development
-const MOCK_USERS = [
-  {
-    id: '1',
-    email: 'user@okanassist.com',
-    password: '123456',
-    name: 'John Doe',
-    phone: '+1234567890',
-    currency: 'USD',
-    language: 'en',
-    timezone: 'UTC',
-  },
-  {
-    id: '2',
-    email: 'demo@test.com',
-    password: 'demo123',
-    name: 'Demo User',
-    phone: '+0987654321',
-    currency: 'EUR',
-    language: 'en',
-    timezone: 'UTC',
-  },
-];
-
-// Auth Provider Component
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authToken, setAuthToken] = useState(null);
 
-  // Check if user is logged in on app start
   useEffect(() => {
     checkAuthState();
   }, []);
 
   const checkAuthState = async () => {
     try {
-      const userData = await AsyncStorage.getItem('userData');
-      if (userData) {
+      const [userData, token] = await Promise.all([
+        AsyncStorage.getItem('userData'),
+        AsyncStorage.getItem('authToken')
+      ]);
+
+      if (userData && token) {
         const parsedUser = JSON.parse(userData);
-        setUser(parsedUser);
-        setIsAuthenticated(true);
+        
+        // Verify token is still valid
+        try {
+          const profileData = await ApiService.getUserProfile(token);
+          setUser(profileData.user);
+          setAuthToken(token);
+          setIsAuthenticated(true);
+        } catch (error) {
+          console.log('Token expired, clearing auth state');
+          await clearAuthState();
+        }
       }
     } catch (error) {
       console.error('Error checking auth state:', error);
+      await clearAuthState();
     } finally {
       setLoading(false);
     }
   };
 
-  // Login function
+  const clearAuthState = async () => {
+    await AsyncStorage.multiRemove(['userData', 'authToken', 'refreshToken']);
+    setUser(null);
+    setAuthToken(null);
+    setIsAuthenticated(false);
+  };
+
+  const saveAuthState = async (userData, tokens) => {
+    await AsyncStorage.multiSet([
+      ['userData', JSON.stringify(userData)],
+      ['authToken', tokens.access_token],
+      ['refreshToken', tokens.refresh_token || '']
+    ]);
+    
+    setUser(userData);
+    setAuthToken(tokens.access_token);
+    setIsAuthenticated(true);
+  };
+
   const login = async (email, password) => {
     try {
       setLoading(true);
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await ApiService.login(email, password);
       
-      // Find user in mock data
-      const foundUser = MOCK_USERS.find(
-        u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-      );
-      
-      if (foundUser) {
-        // Remove password from stored user data
-        const { password: _, ...userWithoutPassword } = foundUser;
-        
-        // Store user data
-        await AsyncStorage.setItem('userData', JSON.stringify(userWithoutPassword));
-        setUser(userWithoutPassword);
-        setIsAuthenticated(true);
-        
+      if (response.success) {
+        await saveAuthState(response.user, response.tokens);
         return { success: true, message: 'Login successful!' };
       } else {
-        return { success: false, message: 'Invalid email or password' };
+        return { success: false, message: response.message || 'Login failed' };
       }
     } catch (error) {
       console.error('Login error:', error);
-      return { success: false, message: 'Login failed. Please try again.' };
+      return { success: false, message: error.message || 'Login failed. Please try again.' };
     } finally {
       setLoading(false);
     }
   };
 
-  // Register function
+  const loginWithGoogle = async () => {
+    try {
+      setLoading(true);
+      
+      const googleResult = await GoogleAuthService.signIn();
+      
+      if (!googleResult.success) {
+        return { success: false, message: googleResult.error };
+      }
+
+      // Send Google token to your backend
+      const response = await ApiService.loginWithGoogle(googleResult.tokens.idToken);
+      
+      if (response.success) {
+        await saveAuthState(response.user, response.tokens);
+        return { success: true, message: 'Google login successful!' };
+      } else {
+        return { success: false, message: response.message || 'Google login failed' };
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+      return { success: false, message: error.message || 'Google login failed. Please try again.' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const register = async (userData) => {
     try {
       setLoading(true);
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const response = await ApiService.register(userData);
       
-      // Check if email already exists
-      const existingUser = MOCK_USERS.find(
-        u => u.email.toLowerCase() === userData.email.toLowerCase()
-      );
-      
-      if (existingUser) {
-        return { success: false, message: 'Email already exists' };
+      if (response.success) {
+        // If registration requires email verification
+        if (response.requires_verification) {
+          return { 
+            success: true, 
+            message: 'Registration successful! Please check your email to verify your account.',
+            requiresVerification: true,
+            verificationToken: response.verification_token
+          };
+        } else {
+          // Auto-login after registration
+          await saveAuthState(response.user, response.tokens);
+          return { success: true, message: 'Registration successful!' };
+        }
+      } else {
+        return { success: false, message: response.message || 'Registration failed' };
       }
-      
-      // Create new user
-      const newUser = {
-        id: Date.now().toString(),
-        email: userData.email,
-        name: userData.name,
-        phone: userData.phone || '',
-        currency: userData.currency || 'USD',
-        language: userData.language || 'en',
-        timezone: userData.timezone || 'UTC',
-      };
-      
-      // Add to mock users (in real app, this would be API call)
-      MOCK_USERS.push({ ...newUser, password: userData.password });
-      
-      // Store user data (without password)
-      await AsyncStorage.setItem('userData', JSON.stringify(newUser));
-      setUser(newUser);
-      setIsAuthenticated(true);
-      
-      return { success: true, message: 'Registration successful!' };
     } catch (error) {
       console.error('Registration error:', error);
-      return { success: false, message: 'Registration failed. Please try again.' };
+      return { success: false, message: error.message || 'Registration failed. Please try again.' };
     } finally {
       setLoading(false);
     }
   };
 
-  // Logout function
+  const verifyEmail = async (verificationToken) => {
+    try {
+      setLoading(true);
+      
+      const response = await ApiService.verifyEmail(verificationToken);
+      
+      if (response.success) {
+        await saveAuthState(response.user, response.tokens);
+        return { success: true, message: 'Email verified successfully!' };
+      } else {
+        return { success: false, message: response.message || 'Email verification failed' };
+      }
+    } catch (error) {
+      console.error('Email verification error:', error);
+      return { success: false, message: error.message || 'Email verification failed' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     try {
       setLoading(true);
-      await AsyncStorage.removeItem('userData');
-      setUser(null);
-      setIsAuthenticated(false);
+      
+      // Call API logout if we have a token
+      if (authToken) {
+        try {
+          await ApiService.logout(authToken);
+        } catch (error) {
+          console.log('API logout failed, continuing with local logout');
+        }
+      }
+
+      // Sign out from Google if signed in
+      await GoogleAuthService.signOut();
+      
+      // Clear local state
+      await clearAuthState();
+      
     } catch (error) {
       console.error('Logout error:', error);
+      // Even if API call fails, clear local state
+      await clearAuthState();
     } finally {
       setLoading(false);
     }
   };
 
-  // Update user profile
   const updateProfile = async (updates) => {
     try {
-      const updatedUser = { ...user, ...updates };
-      await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
-      setUser(updatedUser);
-      return { success: true, message: 'Profile updated successfully!' };
+      if (!authToken) {
+        return { success: false, message: 'Not authenticated' };
+      }
+
+      const response = await ApiService.updateUserProfile(authToken, updates);
+      
+      if (response.success) {
+        const updatedUser = { ...user, ...response.user };
+        await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+        return { success: true, message: 'Profile updated successfully!' };
+      } else {
+        return { success: false, message: response.message || 'Failed to update profile' };
+      }
     } catch (error) {
       console.error('Update profile error:', error);
-      return { success: false, message: 'Failed to update profile' };
+      return { success: false, message: error.message || 'Failed to update profile' };
+    }
+  };
+
+  const refreshAuthToken = async () => {
+    try {
+      const refreshToken = await AsyncStorage.getItem('refreshToken');
+      if (!refreshToken) {
+        throw new Error('No refresh token available');
+      }
+
+      const response = await ApiService.refreshToken(refreshToken);
+      
+      if (response.success) {
+        await AsyncStorage.setItem('authToken', response.tokens.access_token);
+        setAuthToken(response.tokens.access_token);
+        return true;
+      } else {
+        throw new Error('Token refresh failed');
+      }
+    } catch (error) {
+      console.error('Token refresh error:', error);
+      await logout(); // Force logout if refresh fails
+      return false;
     }
   };
 
@@ -176,10 +247,14 @@ export const AuthProvider = ({ children }) => {
     user,
     loading,
     isAuthenticated,
+    authToken,
     login,
+    loginWithGoogle,
     register,
+    verifyEmail,
     logout,
     updateProfile,
+    refreshAuthToken,
   };
 
   return (
