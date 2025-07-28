@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList } from '
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 
+
 export default function HomeScreen({ navigation }) {
   const { colors, spacing, typography, shadows } = useTheme();
   const { user } = useAuth();
@@ -212,7 +213,9 @@ export default function HomeScreen({ navigation }) {
   });
 
   return (
+    
     <View style={styles.container}>
+      
       <ScrollView 
         style={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
@@ -290,6 +293,7 @@ export default function HomeScreen({ navigation }) {
           )}
         </View>
       </ScrollView>
+      
     </View>
   );
 }

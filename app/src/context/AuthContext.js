@@ -96,29 +96,73 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       
-      const googleResult = await GoogleAuthService.signIn();
+      // Configure Google Sign-In
+      const googleWebClientId = Constants.expoConfig?.extra?.googleWebClientId;
       
-      if (!googleResult.success) {
-        return { success: false, message: googleResult.error };
+      if (!googleWebClientId) {
+        return { success: false, message: 'Google configuration not found' };
       }
 
-      // Send Google token to your backend
-      const response = await ApiService.loginWithGoogle(googleResult.tokens.idToken);
+      GoogleSignin.configure({
+        webClientId: googleWebClientId,
+        offlineAccess: true,
+        forceCodeForRefreshToken: true,
+      });
+
+      // Check Play Services
+      await GoogleSignin.hasPlayServices();
       
-      if (response.success) {
-        await saveAuthState(response.user, response.tokens);
+      // Sign in with Google
+      const userInfo = await GoogleSignin.signIn();
+      console.log('✅ Google Sign-In successful:', userInfo.user.email);
+      
+      // Get ID token
+      const idToken = userInfo.idToken;
+      if (!idToken) {
+        return { success: false, message: 'No ID token received from Google' };
+      }
+
+      // Send to your API
+      const apiUrl = Constants.expoConfig?.extra?.apiUrl || 'http://192.168.1.100:8000/api';
+      
+      const response = await fetch(`${apiUrl}/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          google_token: idToken,
+        }),
+      });
+
+      const data = await response.json();
+      console.log('📡 API Response:', data);
+
+      if (response.ok && data.success) {
+        // Save auth state
+        await saveAuthState(data.user, data.tokens);
         return { success: true, message: 'Google login successful!' };
       } else {
-        return { success: false, message: response.message || 'Google login failed' };
+        return { success: false, message: data.message || 'Google login failed' };
       }
+
     } catch (error) {
       console.error('Google login error:', error);
-      return { success: false, message: error.message || 'Google login failed. Please try again.' };
+      
+      let message = 'Google login failed';
+      if (error.code === 'SIGN_IN_CANCELLED') {
+        message = 'Sign-in was cancelled';
+      } else if (error.code === 'IN_PROGRESS') {
+        message = 'Sign-in already in progress';
+      } else if (error.code === 'PLAY_SERVICES_NOT_AVAILABLE') {
+        message = 'Google Play Services not available';
+      }
+      
+      return { success: false, message };
     } finally {
       setLoading(false);
     }
   };
-
   const register = async (userData) => {
     try {
       setLoading(true);
