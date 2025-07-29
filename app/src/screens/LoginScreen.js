@@ -1,5 +1,5 @@
 // app/src/screens/LoginScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,6 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import Constants from 'expo-constants';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -27,31 +25,6 @@ export default function LoginScreen({ navigation }) {
   });
   const [errors, setErrors] = useState({});
   const [googleLoading, setGoogleLoading] = useState(false);
-
-  // Configure Google Sign-In
-  useEffect(() => {
-    configureGoogleSignIn();
-  }, []);
-
-  const configureGoogleSignIn = () => {
-    const googleWebClientId = Constants.expoConfig?.extra?.googleWebClientId;
-    
-    if (!googleWebClientId) {
-      console.log('⚠️ Google Web Client ID not found in app.json');
-      return;
-    }
-
-    try {
-      GoogleSignin.configure({
-        webClientId: googleWebClientId,
-        offlineAccess: true,
-        forceCodeForRefreshToken: true,
-      });
-      console.log('✅ Google Sign-In configured');
-    } catch (error) {
-      console.error('❌ Google Sign-In configuration error:', error);
-    }
-  };
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -94,59 +67,17 @@ export default function LoginScreen({ navigation }) {
     setGoogleLoading(true);
     
     try {
-      // Check Play Services
-      await GoogleSignin.hasPlayServices();
+      const result = await loginWithGoogle();
       
-      // Sign in with Google
-      const userInfo = await GoogleSignin.signIn();
-      console.log('✅ Google Sign-In successful:', userInfo.user.email);
-      
-      // Get ID token
-      const idToken = userInfo.idToken;
-      if (!idToken) {
-        throw new Error('No ID token received from Google');
-      }
-
-      // Send to your API
-      const apiUrl = Constants.expoConfig?.extra?.apiUrl || 'http://192.168.1.100:8000/api';
-      
-      const response = await fetch(`${apiUrl}/auth/google`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          google_token: idToken,
-        }),
-      });
-
-      const data = await response.json();
-      console.log('📡 API Response:', data);
-
-      if (response.ok && data.success) {
-        // Store auth data (you might want to update your AuthContext to handle this)
-        Alert.alert('Success!', `Welcome ${data.user.name}!\n\nGoogle login successful.`);
-        
-        // TODO: Update your AuthContext to handle the login response
-        // For now, we'll just show success
-        
+      if (result.success) {
+        // Success is handled by AuthContext (navigation, etc.)
+        console.log('✅ Login successful via AuthContext');
       } else {
-        Alert.alert('Login Failed', data.message || 'Google login failed');
+        Alert.alert('Google Login Failed', result.message);
       }
-
     } catch (error) {
-      console.error('❌ Google login error:', error);
-      
-      let errorMessage = 'Google login failed';
-      if (error.code === 'SIGN_IN_CANCELLED') {
-        errorMessage = 'Sign-in was cancelled';
-      } else if (error.code === 'IN_PROGRESS') {
-        errorMessage = 'Sign-in already in progress';
-      } else if (error.code === 'PLAY_SERVICES_NOT_AVAILABLE') {
-        errorMessage = 'Google Play Services not available';
-      }
-      
-      Alert.alert('Google Login Error', errorMessage);
+      console.error('Google login error:', error);
+      Alert.alert('Error', 'Google login failed. Please try again.');
     } finally {
       setGoogleLoading(false);
     }

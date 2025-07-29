@@ -2,7 +2,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiService from '../services/api';
-import GoogleAuthService from '../services/googleAuth';
+import ExpoGoogleAuth from '../services/expoGoogleAuth';
+import Constants from 'expo-constants';
 
 const AuthContext = createContext();
 
@@ -96,34 +97,25 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       
-      // Configure Google Sign-In
-      const googleWebClientId = Constants.expoConfig?.extra?.googleWebClientId;
+      console.log('🚀 Starting Google login...');
       
-      if (!googleWebClientId) {
-        return { success: false, message: 'Google configuration not found' };
+      // Use Expo AuthSession for Google authentication
+      const googleResult = await ExpoGoogleAuth.signIn();
+      
+      if (!googleResult.success) {
+        // Handle cancellation gracefully
+        if (googleResult.cancelled) {
+          return { success: false, message: 'Sign-in was cancelled' };
+        }
+        return { success: false, message: googleResult.error };
       }
 
-      GoogleSignin.configure({
-        webClientId: googleWebClientId,
-        offlineAccess: true,
-        forceCodeForRefreshToken: true,
-      });
+      console.log('✅ Google authentication successful for:', googleResult.user.email);
 
-      // Check Play Services
-      await GoogleSignin.hasPlayServices();
-      
-      // Sign in with Google
-      const userInfo = await GoogleSignin.signIn();
-      console.log('✅ Google Sign-In successful:', userInfo.user.email);
-      
-      // Get ID token
-      const idToken = userInfo.idToken;
-      if (!idToken) {
-        return { success: false, message: 'No ID token received from Google' };
-      }
-
-      // Send to your API
+      // Send Google ID token to your backend API
       const apiUrl = Constants.expoConfig?.extra?.apiUrl || 'http://192.168.1.100:8000/api';
+      
+      console.log('📡 Sending token to API:', apiUrl);
       
       const response = await fetch(`${apiUrl}/auth/google`, {
         method: 'POST',
@@ -131,38 +123,49 @@ export const AuthProvider = ({ children }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          google_token: idToken,
+          google_token: googleResult.idToken,
         }),
       });
 
       const data = await response.json();
-      console.log('📡 API Response:', data);
+      console.log('🔙 API Response:', data.success ? 'Success' : 'Failed', data.message);
 
       if (response.ok && data.success) {
-        // Save auth state
+        // Save authentication state
         await saveAuthState(data.user, data.tokens);
-        return { success: true, message: 'Google login successful!' };
+        
+        return { 
+          success: true, 
+          message: `Welcome ${data.user.name}! Google login successful.`
+        };
       } else {
-        return { success: false, message: data.message || 'Google login failed' };
+        return { 
+          success: false, 
+          message: data.message || 'Server authentication failed' 
+        };
       }
 
     } catch (error) {
-      console.error('Google login error:', error);
+      console.error('❌ Google login error:', error);
       
-      let message = 'Google login failed';
-      if (error.code === 'SIGN_IN_CANCELLED') {
-        message = 'Sign-in was cancelled';
-      } else if (error.code === 'IN_PROGRESS') {
-        message = 'Sign-in already in progress';
-      } else if (error.code === 'PLAY_SERVICES_NOT_AVAILABLE') {
-        message = 'Google Play Services not available';
+      // Network or other errors
+      if (error.message.includes('Network')) {
+        return { 
+          success: false, 
+          message: 'Network error. Please check your connection and API server.' 
+        };
       }
       
-      return { success: false, message };
+      return { 
+        success: false, 
+        message: error.message || 'Google login failed. Please try again.' 
+      };
     } finally {
       setLoading(false);
     }
+
   };
+
   const register = async (userData) => {
     try {
       setLoading(true);
